@@ -105,7 +105,7 @@ class CoefficientSpectrum {
         for (int i = 0; i < nSpectrumSamples; ++i) c[i] = v;
         DCHECK(!HasNaNs());
     }
-#ifdef DEBUG
+#if defined(DEBUG) || defined(PBRT_RUNTIME_RESOLUTION_SPECTRUM)
     CoefficientSpectrum(const CoefficientSpectrum &s) {
         DCHECK(!s.HasNaNs());
         for (int i = 0; i < nSpectrumSamples; ++i) c[i] = s.c[i];
@@ -509,6 +509,768 @@ inline SampledSpectrum Lerp(Float t, const SampledSpectrum &s1,
 void ResampleLinearSpectrum(const Float *lambdaIn, const Float *vIn, int nIn,
                             Float lambdaMin, Float lambdaMax, int nOut,
                             Float *vOut);
+
+
+#ifdef PBRT_RUNTIME_RESOLUTION_SPECTRUM
+
+#include "error.h"
+
+// Adding realtime spectrum resolution
+class RuntimeResolutionSpectrum
+{
+    enum class RuntimeSpectrumType { 
+        SampledSpectrumType, 
+        RGBSpectrumType, 
+        count 
+    };
+    static RuntimeSpectrumType spectrumType;
+
+    union RuntimeSpectrum
+    {
+        SampledSpectrum* pSS;
+        RGBSpectrum* pTS;
+    };
+    RuntimeSpectrum runtimeSpectrum;
+
+public:
+    
+    static void setSampledSpectrum()
+    {
+        spectrumType = RuntimeSpectrumType::SampledSpectrumType;
+        nSamples = 60;
+    }
+
+    static void setRGBSpectrum()
+    {
+        spectrumType = RuntimeSpectrumType::RGBSpectrumType;
+        nSamples = 3;
+    }
+
+    RuntimeResolutionSpectrum(Float v = 0.f)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                runtimeSpectrum.pSS = new SampledSpectrum(v); 
+                break;
+            case RuntimeSpectrumType::RGBSpectrumType:
+                runtimeSpectrum.pTS = new RGBSpectrum(v); 
+                break;
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+        }
+    }
+    template <int n>
+    explicit RuntimeResolutionSpectrum(const CoefficientSpectrum<n> &s)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                runtimeSpectrum.pSS = new SampledSpectrum(s); 
+                break;
+            case RuntimeSpectrumType::RGBSpectrumType:
+                runtimeSpectrum.pTS = new RGBSpectrum(s); 
+                break;
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+        }
+    }
+    RuntimeResolutionSpectrum(const SampledSpectrum &s)
+    {
+        DCHECK(spectrumType == RuntimeSpectrumType::SampledSpectrumType);
+        runtimeSpectrum.pSS = new SampledSpectrum;
+        *runtimeSpectrum.pSS = s;
+    }
+    explicit RuntimeResolutionSpectrum(const RGBSpectrum &s)
+    {
+        DCHECK(spectrumType == RuntimeSpectrumType::RGBSpectrumType);
+        runtimeSpectrum.pTS = new RGBSpectrum;
+        *runtimeSpectrum.pTS = s;
+    }
+
+    ~RuntimeResolutionSpectrum()
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                delete runtimeSpectrum.pSS;
+                break;
+            case RuntimeSpectrumType::RGBSpectrumType:
+                delete runtimeSpectrum.pTS;
+                break;
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+        }
+    }
+
+    void Print(FILE *f) const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                runtimeSpectrum.pSS->Print(f);
+                break;
+            case RuntimeSpectrumType::RGBSpectrumType:
+                runtimeSpectrum.pTS->Print(f);
+                break;
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+        }
+    }
+    RuntimeResolutionSpectrum &operator+=(const RuntimeResolutionSpectrum &s2)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                *runtimeSpectrum.pSS += *s2.runtimeSpectrum.pSS;
+                return *this;
+            case RuntimeSpectrumType::RGBSpectrumType:
+                *runtimeSpectrum.pTS += *s2.runtimeSpectrum.pTS;
+                return *this;
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return *this;
+        }
+    }
+    RuntimeResolutionSpectrum operator+(const RuntimeResolutionSpectrum &s2) const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {    
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = *runtimeSpectrum.pSS + *s2.runtimeSpectrum.pSS;
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = *runtimeSpectrum.pTS + *s2.runtimeSpectrum.pTS;
+                return rss;
+            }
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return *this;
+        }
+    }
+    RuntimeResolutionSpectrum operator-(const RuntimeResolutionSpectrum &s2) const 
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = *runtimeSpectrum.pSS - *s2.runtimeSpectrum.pSS;
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = *runtimeSpectrum.pTS - *s2.runtimeSpectrum.pTS;
+                return rss;
+            }       
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return *this;
+        }
+    }
+    RuntimeResolutionSpectrum operator/(const RuntimeResolutionSpectrum &s2) const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = *runtimeSpectrum.pSS / *s2.runtimeSpectrum.pSS;
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = *runtimeSpectrum.pTS / *s2.runtimeSpectrum.pTS;
+                return rss;
+            }       
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return *this;
+        }
+    }
+    RuntimeResolutionSpectrum operator*(const RuntimeResolutionSpectrum &sp) const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = *runtimeSpectrum.pSS * *sp.runtimeSpectrum.pSS;
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = *runtimeSpectrum.pTS * *sp.runtimeSpectrum.pTS;
+                return rss;
+            }  
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return *this;
+        }
+    }
+    RuntimeResolutionSpectrum &operator*=(const RuntimeResolutionSpectrum &sp)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                *runtimeSpectrum.pSS *= *sp.runtimeSpectrum.pSS;
+                return *this;
+            case RuntimeSpectrumType::RGBSpectrumType:
+                *runtimeSpectrum.pTS *= *sp.runtimeSpectrum.pTS;
+                return *this;
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return *this;
+        }
+    }
+    RuntimeResolutionSpectrum operator*(Float a) const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = *runtimeSpectrum.pSS * a;
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = *runtimeSpectrum.pTS * a;
+                return rss;
+            }    
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return *this;
+        }
+    }
+    RuntimeResolutionSpectrum &operator*=(Float a)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                *runtimeSpectrum.pSS *= a;
+                return *this;
+            case RuntimeSpectrumType::RGBSpectrumType:
+                *runtimeSpectrum.pTS *= a;
+                return *this;
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return *this;
+        }
+    }
+    friend inline RuntimeResolutionSpectrum operator*(Float a,
+                                                      const RuntimeResolutionSpectrum &s)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = *s.runtimeSpectrum.pSS * a;
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = *s.runtimeSpectrum.pTS * a;
+                return rss;
+            }
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return RuntimeResolutionSpectrum();
+        }
+    }
+    RuntimeResolutionSpectrum operator/(Float a) const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = *runtimeSpectrum.pSS / a;
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = *runtimeSpectrum.pTS / a;
+                return rss;
+            }
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return *this;
+        }
+    }
+    RuntimeResolutionSpectrum &operator/=(Float a)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                *runtimeSpectrum.pSS /= a;
+                return *this;
+            case RuntimeSpectrumType::RGBSpectrumType:
+                *runtimeSpectrum.pTS /= a;
+                return *this;
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return *this;
+        }
+    }
+    bool operator==(const RuntimeResolutionSpectrum &sp) const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                return *runtimeSpectrum.pSS == *sp.runtimeSpectrum.pSS;
+            case RuntimeSpectrumType::RGBSpectrumType:
+                return *runtimeSpectrum.pTS == *sp.runtimeSpectrum.pTS;
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return false;
+        }
+    }
+    bool operator!=(const RuntimeResolutionSpectrum &sp) const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                return *runtimeSpectrum.pSS != *sp.runtimeSpectrum.pSS;
+            case RuntimeSpectrumType::RGBSpectrumType:
+                return *runtimeSpectrum.pTS != *sp.runtimeSpectrum.pTS;
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return false;
+        }
+    }
+    bool IsBlack() const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                return runtimeSpectrum.pSS->IsBlack();
+            case RuntimeSpectrumType::RGBSpectrumType:
+                return runtimeSpectrum.pTS->IsBlack();
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return false;
+        }
+    }
+    friend RuntimeResolutionSpectrum Sqrt(const RuntimeResolutionSpectrum &s)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = Sqrt(*s.runtimeSpectrum.pSS);
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = Sqrt(*s.runtimeSpectrum.pTS);
+                return rss;
+            }
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return RuntimeResolutionSpectrum();
+        }
+    }
+    friend inline RuntimeResolutionSpectrum Pow(const RuntimeResolutionSpectrum &s,
+                                             Float e)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = Pow(*s.runtimeSpectrum.pSS, e);
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = Pow(*s.runtimeSpectrum.pTS, e);
+                return rss;
+            }            
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return RuntimeResolutionSpectrum();
+        }
+    }
+    RuntimeResolutionSpectrum operator-() const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = -(*runtimeSpectrum.pSS);
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = -(*runtimeSpectrum.pTS);
+                return rss;
+            }     
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return *this;
+        }
+    }
+    friend RuntimeResolutionSpectrum Exp(const RuntimeResolutionSpectrum &s)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = Exp(*s.runtimeSpectrum.pSS);
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = Exp(*s.runtimeSpectrum.pTS);
+                return rss;
+            }            
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return RuntimeResolutionSpectrum();
+        }
+    }
+    friend std::ostream &operator<<(std::ostream &os,
+                                    const RuntimeResolutionSpectrum &s)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                return os << *s.runtimeSpectrum.pSS;
+            case RuntimeSpectrumType::RGBSpectrumType:
+                return os << *s.runtimeSpectrum.pTS;
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return os << "ERROR";
+        }
+    }
+    std::string ToString() const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                return runtimeSpectrum.pSS->ToString();
+            case RuntimeSpectrumType::RGBSpectrumType:
+                return runtimeSpectrum.pTS->ToString();
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return "ERROR";
+        }
+    }
+    RuntimeResolutionSpectrum Clamp(Float low = 0, Float high = Infinity) const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = runtimeSpectrum.pSS->Clamp(low, high);
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = runtimeSpectrum.pTS->Clamp(low, high);
+                return rss;
+            }   
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return *this;
+        }
+    }
+    Float MaxComponentValue() const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                return runtimeSpectrum.pSS->MaxComponentValue();
+            case RuntimeSpectrumType::RGBSpectrumType:
+                return runtimeSpectrum.pTS->MaxComponentValue();
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return 0.0f;
+        }
+    }
+    bool HasNaNs() const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                return runtimeSpectrum.pSS->HasNaNs();
+            case RuntimeSpectrumType::RGBSpectrumType:
+                return runtimeSpectrum.pTS->HasNaNs();
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return false;
+        }
+    }
+    bool Write(FILE *f) const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                return runtimeSpectrum.pSS->Write(f);
+            case RuntimeSpectrumType::RGBSpectrumType:
+                return runtimeSpectrum.pTS->Write(f);
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return false;
+        }
+    }
+    bool Read(FILE *f)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                return runtimeSpectrum.pSS->Read(f);
+            case RuntimeSpectrumType::RGBSpectrumType:
+                return runtimeSpectrum.pTS->Read(f);
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return false;
+        }
+    }
+    Float &operator[](int i)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                return (*runtimeSpectrum.pSS)[i];
+            case RuntimeSpectrumType::RGBSpectrumType:
+                return (*runtimeSpectrum.pTS)[i];
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return (*runtimeSpectrum.pTS)[i];
+        }
+    }
+    Float operator[](int i) const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                return (*runtimeSpectrum.pSS)[i];
+            case RuntimeSpectrumType::RGBSpectrumType:
+                return (*runtimeSpectrum.pTS)[i];
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return 0.0f;
+        }
+    }
+
+    // RGBSpectrum and SampledSpectrum public functions
+    RuntimeResolutionSpectrum(const RGBSpectrum &s,
+                SpectrumType type = SpectrumType::Reflectance)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                runtimeSpectrum.pSS = new SampledSpectrum(s, type); 
+                break;
+            case RuntimeSpectrumType::RGBSpectrumType:
+                runtimeSpectrum.pTS = new RGBSpectrum(s, type); 
+                break;
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+        }
+
+    }
+    static RuntimeResolutionSpectrum FromRGB(const Float rgb[3],
+                          SpectrumType type = SpectrumType::Reflectance)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {    
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = SampledSpectrum::FromRGB(rgb, type);
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = RGBSpectrum::FromRGB(rgb, type);
+                return rss;
+            }
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return RuntimeResolutionSpectrum();
+        }
+    }
+    void ToRGB(Float *rgb) const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                runtimeSpectrum.pSS->ToRGB(rgb);
+                break;
+            case RuntimeSpectrumType::RGBSpectrumType:
+                runtimeSpectrum.pTS->ToRGB(rgb);
+                break;
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+        }
+    }
+    const RGBSpectrum ToRGBSpectrum() const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                return RGBSpectrum((runtimeSpectrum.pSS)->ToRGBSpectrum());
+            case RuntimeSpectrumType::RGBSpectrumType:
+                return RGBSpectrum((runtimeSpectrum.pTS)->ToRGBSpectrum());
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return RGBSpectrum(0.0f);
+        }
+    }
+    void ToXYZ(Float xyz[3]) const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                runtimeSpectrum.pSS->ToXYZ(xyz);
+                break;
+            case RuntimeSpectrumType::RGBSpectrumType:
+                runtimeSpectrum.pTS->ToXYZ(xyz);
+                break;
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+        }
+    }
+    static RuntimeResolutionSpectrum FromXYZ(const Float xyz[3],
+                               SpectrumType type = SpectrumType::Reflectance)
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {    
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = SampledSpectrum::FromXYZ(xyz, type);
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = RGBSpectrum::FromXYZ(xyz, type);
+                return rss;
+            }
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return RuntimeResolutionSpectrum();
+        }
+    }
+    Float y() const
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+                return runtimeSpectrum.pSS->y();
+            case RuntimeSpectrumType::RGBSpectrumType:
+                return runtimeSpectrum.pTS->y();
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return 0.0f;
+        }
+    }
+    static RuntimeResolutionSpectrum FromSampled(const Float *lambda, const Float *v, int n) 
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {    
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = SampledSpectrum::FromSampled(lambda, v, n);
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = RGBSpectrum::FromSampled(lambda, v, n);
+                return rss;
+            }
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return RuntimeResolutionSpectrum();
+        }
+    }
+    friend inline RuntimeResolutionSpectrum Lerp(Float t, const RuntimeResolutionSpectrum &s1, const RuntimeResolutionSpectrum &s2) 
+    {
+        switch(spectrumType)
+        {
+            case RuntimeSpectrumType::SampledSpectrumType:
+            {    
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pSS = new SampledSpectrum;
+                *rss.runtimeSpectrum.pSS = Lerp(t, *s1.runtimeSpectrum.pSS, *s2.runtimeSpectrum.pSS);
+                return rss;
+            }
+            case RuntimeSpectrumType::RGBSpectrumType:
+            {
+                RuntimeResolutionSpectrum rss;
+                rss.runtimeSpectrum.pTS = new RGBSpectrum;
+                *rss.runtimeSpectrum.pTS = Lerp(t, *s1.runtimeSpectrum.pTS, *s2.runtimeSpectrum.pTS);
+                return rss;
+            }
+            default:
+                Error("Found default case in %s:%i", __FILE__, __LINE__);
+                return RuntimeResolutionSpectrum();
+        }
+    }
+
+    static int nSamples;
+};
+
+
+#endif // PBRT_RUNTIME_RESOLUTION_SPECTRUM
 
 }  // namespace pbrt
 

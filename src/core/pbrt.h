@@ -123,10 +123,15 @@ template <int nSpectrumSamples>
 class CoefficientSpectrum;
 class RGBSpectrum;
 class SampledSpectrum;
-#ifdef PBRT_SAMPLED_SPECTRUM
-  typedef SampledSpectrum Spectrum;
+class RuntimeResolutionSpectrum;
+#ifdef PBRT_RUNTIME_RESOLUTION_SPECTRUM
+  typedef RuntimeResolutionSpectrum Spectrum;
 #else
-  typedef RGBSpectrum Spectrum;
+  #ifdef PBRT_SAMPLED_SPECTRUM
+    typedef SampledSpectrum Spectrum;
+  #else
+    typedef RGBSpectrum Spectrum;
+  #endif
 #endif
 class Camera;
 struct CameraSample;

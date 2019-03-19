@@ -187,6 +187,16 @@ Float InterpolateSpectrumSamples(const Float *lambda, const Float *vals, int n,
     return Lerp(t, vals[offset], vals[offset + 1]);
 }
 
+#ifdef PBRT_RUNTIME_RESOLUTION_SPECTRUM
+#ifdef PBRT_SAMPLED_SPECTRUM
+RuntimeResolutionSpectrum::RuntimeSpectrumType RuntimeResolutionSpectrum::spectrumType = RuntimeResolutionSpectrum::RuntimeSpectrumType::RGBSpectrumType;
+#else
+RuntimeResolutionSpectrum::RuntimeSpectrumType RuntimeResolutionSpectrum::spectrumType = RuntimeResolutionSpectrum::RuntimeSpectrumType::SampledSpectrumType;
+#endif
+
+int RuntimeResolutionSpectrum::nSamples = 0;
+#endif
+
 const Float CIE_X[nCIESamples] = {
     // CIE X function values
     0.0001299000f,   0.0001458470f,   0.0001638021f,   0.0001840037f,

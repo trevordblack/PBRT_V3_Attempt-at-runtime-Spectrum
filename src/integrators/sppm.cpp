@@ -45,6 +45,11 @@
 #include "samplers/halton.h"
 #include "stats.h"
 
+
+#ifdef PBRT_RUNTIME_RESOLUTION_SPECTRUM
+#include <vector>
+#endif
+
 namespace pbrt {
 
 STAT_RATIO(
@@ -59,10 +64,17 @@ STAT_INT_DISTRIBUTION(
 STAT_MEMORY_COUNTER("Memory/SPPM Pixels", pixelMemoryBytes);
 STAT_FLOAT_DISTRIBUTION("Memory/SPPM BSDF and Grid Memory", memoryArenaMB);
 
+// @todo figure out how to get size of Phi at runtime 
+
 // SPPM Local Definitions
 struct SPPMPixel {
     // SPPMPixel Public Methods
-    SPPMPixel() : M(0) {}
+    SPPMPixel() : M(0) 
+    {
+#ifdef PBRT_RUNTIME_RESOLUTION_SPECTRUM
+        //Phi.resize(Spectrum::nSamples);
+#endif
+    }
 
     // SPPMPixel Public Data
     Float radius = 0;
@@ -78,7 +90,12 @@ struct SPPMPixel {
         const BSDF *bsdf = nullptr;
         Spectrum beta;
     } vp;
+    
+#ifdef PBRT_RUNTIME_RESOLUTION_SPECTRUM
+    std::vector<AtomicFloat> Phi;
+#else
     AtomicFloat Phi[Spectrum::nSamples];
+#endif
     std::atomic<int> M;
     Float N = 0;
     Spectrum tau;

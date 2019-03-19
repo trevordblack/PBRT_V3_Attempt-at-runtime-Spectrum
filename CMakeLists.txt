@@ -21,6 +21,12 @@ IF (PBRT_SAMPLED_SPECTRUM)
   ADD_DEFINITIONS ( -D PBRT_SAMPLED_SPECTRUM )
 ENDIF()
 
+OPTION(PBRT_RUNTIME_RESOLUTION_SPECTRUM "Resolve Type of Spectrum at runtime, rather than compile time" ON)
+
+IF (PBRT_RUNTIME_RESOLUTION_SPECTRUM)
+  ADD_DEFINITIONS ( -D PBRT_RUNTIME_RESOLUTION_SPECTRUM )
+ENDIF()
+
 ENABLE_TESTING()
 
 if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -199,7 +205,7 @@ int main() {
    fstat(fd, &s);
    size_t len = s.st_size;
    void *ptr = mmap(0, len, PROT_READ, MAP_FILE | MAP_SHARED, fd, 0);
-   munmap(ptr, len);   
+   munmap(ptr, len);
 }
 " HAVE_MMAP )
 if ( HAVE_MMAP )

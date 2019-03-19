@@ -1035,7 +1035,9 @@ static void parse(std::unique_ptr<Tokenizer> t) {
                 for (int i = 0; i < 3; ++i)
                     v[i] = parseNumber(nextToken(TokenRequired));
                 pbrtScale(v[0], v[1], v[2]);
-            } else
+            } else if (tok == "Spectrum")
+                basicParamListEntrypoint(SpectrumType::Reflectance, pbrtSpectrum);
+            else
                 syntaxError(tok);
             break;
 

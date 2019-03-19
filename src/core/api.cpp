@@ -160,6 +160,9 @@ struct RenderOptions {
     Integrator *MakeIntegrator() const;
     Scene *MakeScene();
     Camera *MakeCamera() const;
+#ifdef PBRT_RUNTIME_RESOLUTION_SPECTRUM
+    void MakeSpectrum() const;
+#endif
 
     // RenderOptions Public Data
     Float transformStartTime = 0, transformEndTime = 1;
@@ -176,6 +179,15 @@ struct RenderOptions {
     std::string CameraName = "perspective";
     ParamSet CameraParams;
     TransformSet CameraToWorld;
+#ifdef PBRT_RUNTIME_RESOLUTION_SPECTRUM
+    std::string SpectrumName = 
+    #ifdef PBRT_SAMPLED_SPECTRUM
+        "sampled";
+    #else
+        "rgb";
+    #endif
+    ParamSet SpectrumParams;
+#endif
     std::map<std::string, std::shared_ptr<Medium>> namedMedia;
     std::vector<std::shared_ptr<Light>> lights;
     std::vector<std::shared_ptr<Primitive>> primitives;
@@ -817,6 +829,27 @@ Camera *MakeCamera(const std::string &name, const ParamSet &paramSet,
     return camera;
 }
 
+// @todo this is called entirely too late.
+//     All of the integrators and samplers, and yadda yadda, ask for a Sampler before it's defined
+// @todo Fix it so that it works when Spectrum "*" is at top of pbrt file
+// @todo Fix it so that it works when Spectrum "*" is Wherever in gutter of pbrt file
+#ifdef PBRT_RUNTIME_RESOLUTION_SPECTRUM
+void MakeSpectrum(const std::string &name, const ParamSet &paramSet)
+{
+    if (name == "sampled")
+    {
+        RuntimeResolutionSpectrum::setSampledSpectrum();
+    }
+    else if (name == "rgb")
+    {
+        RuntimeResolutionSpectrum::setRGBSpectrum();
+    }
+    else
+        Warning("Spectrum \"%s\" unknown.", name.c_str());
+    paramSet.ReportUnused();
+}
+#endif
+
 std::shared_ptr<Sampler> MakeSampler(const std::string &name,
                                      const ParamSet &paramSet,
                                      const Film *film) {
@@ -1088,6 +1121,30 @@ void pbrtCamera(const std::string &name, const ParamSet &params) {
         params.Print(catIndentCount);
         printf("\n");
     }
+}
+
+void pbrtSpectrum(const std::string &name, const ParamSet &params)
+{
+#ifdef PBRT_RUNTIME_RESOLUTION_SPECTRUM
+    VERIFY_OPTIONS("Spectrum");
+    renderOptions->SpectrumName = name;
+    renderOptions->SpectrumParams = params;
+    if (PbrtOptions.cat || PbrtOptions.toPly) {
+        printf("%*sSpectrum \"%s\" ", catIndentCount, "", name.c_str());
+        params.Print(catIndentCount);
+        printf("\n");
+    }
+
+#else
+    Warning("\"Spectrum\" parameter found in scene description. But project is compiled with "
+            "\"PBRT_RUNTIME_RESOLUTION_SPECTRUM\" undefined. Defaulting to \"%s\".",
+#ifdef PBRT_SAMPLED_SPECTRUM
+            "SampledSpectrum"
+#else
+            "RGBSpectrum"
+#endif
+            );
+#endif
 }
 
 void pbrtMakeNamedMedium(const std::string &name, const ParamSet &params) {
@@ -1608,6 +1665,11 @@ void pbrtWorldEnd() {
     if (PbrtOptions.cat || PbrtOptions.toPly) {
         printf("%*sWorldEnd\n", catIndentCount, "");
     } else {
+
+#ifdef PBRT_RUNTIME_RESOLUTION_SPECTRUM
+        // Specify the enum of the RuntimeResolutionSpectrum, if it exists
+        renderOptions->MakeSpectrum();
+#endif
         std::unique_ptr<Integrator> integrator(renderOptions->MakeIntegrator());
         std::unique_ptr<Scene> scene(renderOptions->MakeScene());
 
@@ -1729,5 +1791,12 @@ Camera *RenderOptions::MakeCamera() const {
                                   renderOptions->transformEndTime, film);
     return camera;
 }
+
+#ifdef PBRT_RUNTIME_RESOLUTION_SPECTRUM
+void RenderOptions::MakeSpectrum() const
+{
+    pbrt::MakeSpectrum(SpectrumName, SpectrumParams);
+}
+#endif
 
 }  // namespace pbrt
